@@ -19,17 +19,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y nasm build-essential libgl1-mesa-dev
 
+      - name: Cache objconv
+        id: cache-objconv
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/objconv
+          key: ${{ runner.os }}-objconv-2.50
+
       - name: Setup objconv
+        if: steps.cache-objconv.outputs.cache-hit != 'true'
         run: |
           wget https://github.com/gitGNU/objconv/archive/refs/tags/v2.50.tar.gz
           tar -xzf v2.50.tar.gz
-          cd objconv-2.50
-          
+          cd objconv-2.50/src
           chmod +x build.sh
           ./build.sh
-          
           sudo cp objconv /usr/local/bin/
-          cd ..
 
       - name: Create dummy C file for testing
         run: |
