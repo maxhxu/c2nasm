@@ -46,12 +46,13 @@ jobs:
           ./build.sh
           sudo cp objconv /usr/local/bin/
 
-      - name: Create Complex Torture Test
+      - name: Create Complex Test
         run: |
           cat << 'EOF' > test.c
           #include <stdio.h>
 
           // 1. Tests Recursion & Stack Frames
+          // volatile return type prevents the compiler from constant-folding the whole chain
           int fibonacci(int n) {
               if (n <= 1) return n;
               return fibonacci(n - 1) + fibonacci(n - 2);
@@ -59,13 +60,14 @@ jobs:
 
           // 2. Tests Structs and Member Offsets
           struct Data {
-              int id;
-              char label;
-              int value;
+              volatile int id;
+              volatile char label;
+              volatile int value;
           };
 
           // 3. Tests Pointer Arithmetic & Array Handling
-          int sum_array(int *arr, int size) {
+          // Using volatile int* ensures every array access is a real memory load
+          int sum_array(volatile int *arr, int size) {
               int total = 0;
               for (int i = 0; i < size; i++) {
                   total += *(arr + i);
@@ -74,15 +76,22 @@ jobs:
           }
 
           int main() {
-              // Test 1: Fibonacci(7) should be 13
-              if (fibonacci(7) != 13) return 1;
+              // Test 1: Fibonacci
+              // Assigning to a volatile variable prevents the call from being optimized away
+              volatile int fib_input = 7;
+              if (fibonacci(fib_input) != 13) return 1;
 
               // Test 2: Struct Alignment/Offsets
-              struct Data d = {1, 'A', 100};
+              // Mark the struct instance volatile so members aren't just kept in registers
+              volatile struct Data d;
+              d.id = 1;
+              d.label = 'A';
+              d.value = 100;
               if (d.value != 100 || d.id != 1) return 2;
 
               // Test 3: Pointer Math
-              int nums[] = {10, 20, 30};
+              // Mark array elements volatile to force memory reads in sum_array
+              volatile int nums[] = {10, 20, 30};
               if (sum_array(nums, 3) != 60) return 3;
 
               return 0; // Success
