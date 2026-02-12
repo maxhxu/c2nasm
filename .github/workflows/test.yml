@@ -1,0 +1,116 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm build-essential libgl1-mesa-dev valgrind
+
+      - name: Cache objconv
+        id: cache-objconv
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/objconv
+          key: ${{ runner.os }}-objconv-2.50
+
+      - name: Setup objconv
+        if: steps.cache-objconv.outputs.cache-hit != 'true'
+        run: |
+          wget https://github.com/gitGNU/objconv/archive/refs/tags/v2.50.tar.gz
+          tar -xzf v2.50.tar.gz
+          cd objconv-2.50/src
+          chmod +x build.sh
+          ./build.sh
+          sudo cp objconv /usr/local/bin/
+
+      - name: Create Complex Torture Test
+        run: |
+          cat << 'EOF' > test.c
+          #include <stdio.h>
+
+          // 1. Tests Recursion & Stack Frames
+          int fibonacci(int n) {
+              if (n <= 1) return n;
+              return fibonacci(n - 1) + fibonacci(n - 2);
+          }
+
+          // 2. Tests Structs and Member Offsets
+          struct Data {
+              int id;
+              char label;
+              int value;
+          };
+
+          // 3. Tests Pointer Arithmetic & Array Handling
+          int sum_array(int *arr, int size) {
+              int total = 0;
+              for (int i = 0; i < size; i++) {
+                  total += *(arr + i);
+              }
+              return total;
+          }
+
+          int main() {
+              // Test 1: Fibonacci(7) should be 13
+              if (fibonacci(7) != 13) return 1;
+
+              // Test 2: Struct Alignment/Offsets
+              struct Data d = {1, 'A', 100};
+              if (d.value != 100 || d.id != 1) return 2;
+
+              // Test 3: Pointer Math
+              int nums[] = {10, 20, 30};
+              if (sum_array(nums, 3) != 60) return 3;
+
+              return 0; // Success
+          }
+          EOF
+
+      - name: Run conversion script
+        run: |
+          chmod +x c2nasm.sh
+          ./c2nasm.sh test.c
+
+      - name: Verify Execution and Logic
+        run: |
+          # Check if the binary was actually created
+          if [ ! -f "test.c.run" ]; then
+            echo "Error: Binary test.c.run not found."
+            exit 1
+          fi
+
+          # Run the binary and capture the exit code
+          set +e
+          ./test.c.run
+          EXIT_CODE=$?
+          set -e
+
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "Success: All internal logic tests passed."
+          elif [ $EXIT_CODE -eq 1 ]; then
+            echo "Failure: Fibonacci/Recursion logic failed." && exit 1
+          elif [ $EXIT_CODE -eq 2 ]; then
+            echo "Failure: Struct member/Memory offset logic failed." && exit 1
+          elif [ $EXIT_CODE -eq 3 ]; then
+            echo "Failure: Pointer arithmetic/Array logic failed." && exit 1
+          else
+            echo "Failure: Program crashed or returned unknown code $EXIT_CODE." && exit 1
+          fi
+
+      - name: Memory Safety Check (Valgrind)
+        run: |
+          valgrind --leak-check=full --error-exitcode=1 ./test.c.run
+
