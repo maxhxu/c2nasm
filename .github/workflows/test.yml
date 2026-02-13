@@ -15,26 +15,21 @@ on:
       - 'docs/**'
       - '.gitignore'
       - 'LICENSE'
-
-jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-
-    steps:
+steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y nasm build-essential libgl1-mesa-dev valgrind
 
       - name: Cache objconv
         id: cache-objconv
         uses: actions/cache@v4
         with:
-          path: /usr/local/bin/objconv
+          path: ~/objconv_bin
           key: ${{ runner.os }}-objconv-2.50
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm build-essential libgl1-mesa-dev valgrind
 
       - name: Setup objconv
         if: steps.cache-objconv.outputs.cache-hit != 'true'
@@ -44,7 +39,13 @@ jobs:
           cd objconv-2.50/src
           chmod +x build.sh
           ./build.sh
-          sudo cp objconv /usr/local/bin/
+          mkdir -p ~/objconv_bin
+          cp objconv ~/objconv_bin/
+
+      - name: Finalize objconv
+        run: |
+          sudo cp ~/objconv_bin/objconv /usr/local/bin/
+          sudo chmod +x /usr/local/bin/objconv
 
       - name: Create Complex Test
         run: |
