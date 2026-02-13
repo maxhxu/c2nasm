@@ -15,7 +15,11 @@ on:
       - 'docs/**'
       - '.gitignore'
       - 'LICENSE'
-steps:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -52,22 +56,17 @@ steps:
           cat << 'EOF' > test.c
           #include <stdio.h>
 
-          // 1. Tests Recursion & Stack Frames
-          // volatile return type prevents the compiler from constant-folding the whole chain
           int fibonacci(int n) {
               if (n <= 1) return n;
               return fibonacci(n - 1) + fibonacci(n - 2);
           }
 
-          // 2. Tests Structs and Member Offsets
           struct Data {
               volatile int id;
               volatile char label;
               volatile int value;
           };
 
-          // 3. Tests Pointer Arithmetic & Array Handling
-          // Using volatile int* ensures every array access is a real memory load
           int sum_array(volatile int *arr, int size) {
               int total = 0;
               for (int i = 0; i < size; i++) {
@@ -77,25 +76,19 @@ steps:
           }
 
           int main() {
-              // Test 1: Fibonacci
-              // Assigning to a volatile variable prevents the call from being optimized away
               volatile int fib_input = 7;
               if (fibonacci(fib_input) != 13) return 1;
 
-              // Test 2: Struct Alignment/Offsets
-              // Mark the struct instance volatile so members aren't just kept in registers
               volatile struct Data d;
               d.id = 1;
               d.label = 'A';
               d.value = 100;
               if (d.value != 100 || d.id != 1) return 2;
 
-              // Test 3: Pointer Math
-              // Mark array elements volatile to force memory reads in sum_array
               volatile int nums[] = {10, 20, 30};
               if (sum_array(nums, 3) != 60) return 3;
 
-              return 0; // Success
+              return 0;
           }
           EOF
 
@@ -106,13 +99,11 @@ steps:
 
       - name: Verify Execution and Logic
         run: |
-          # Check if the binary was actually created
           if [ ! -f "test.c.run" ]; then
             echo "Error: Binary test.c.run not found."
             exit 1
           fi
 
-          # Run the binary and capture the exit code
           set +e
           ./test.c.run
           EXIT_CODE=$?
